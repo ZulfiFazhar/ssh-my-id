@@ -1,0 +1,14 @@
+[Unit]
+Description=SSH Portfolio Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ubuntu/app/ssh-my-id
+ExecStart=/home/ubuntu/app/ssh-my-id/ssh-my-id
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
