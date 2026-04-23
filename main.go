@@ -33,77 +33,6 @@ func getExeDir() string {
 	return dir
 }
 
-func renderChafa(imagePath string, width int) string {
-	cmd := exec.Command("chafa", "-s", fmt.Sprintf("%dx25", width), imagePath)
-	var out strings.Builder
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return ""
-	}
-	return out.String()
-}
-
-func getBanner() string {
-	exeDir := getExeDir()
-	pngPath := filepath.Join(exeDir, "assets", "ascii-art-text-zulfi.png")
-	gifPath := filepath.Join(exeDir, "assets", "ascii-animation.gif")
-
-	// Render assets
-	gifAscii := renderChafa(gifPath, 55)   // Left: GIF animation
-	nameAscii := renderChafa(pngPath, 55)  // Right top: name art
-	infoAscii := getInfoPanel()
-
-	gifLines := strings.Split(gifAscii, "\n")
-	nameLines := strings.Split(nameAscii, "\n")
-	infoLines := strings.Split(infoAscii, "\n")
-
-	// Determine max height
-	maxLines := len(gifLines)
-	if len(nameLines)+len(infoLines) > maxLines {
-		maxLines = len(nameLines) + len(infoLines)
-	}
-
-	var result strings.Builder
-	result.WriteString("\r\n")
-
-	for i := 0; i < maxLines; i++ {
-		left := ""
-		if i < len(gifLines) {
-			left = gifLines[i]
-		}
-
-		// Right side: name (top) + info (bottom)
-		right := ""
-		nameIdx := i
-		infoIdx := i - len(nameLines)
-
-		if nameIdx >= 0 && nameIdx < len(nameLines) {
-			right = nameLines[nameIdx]
-		} else if infoIdx >= 0 && infoIdx < len(infoLines) {
-			right = infoLines[infoIdx]
-		}
-
-		// Pad left to align with right
-		if left != "" {
-			result.WriteString(left)
-		}
-
-		// Add spacing and right content
-		if right != "" {
-			// Pad left to ~60 chars before writing right
-			for len(left) < 58 {
-				result.WriteString(" ")
-				left += " "
-			}
-			result.WriteString("  ")
-			result.WriteString(right)
-		}
-		result.WriteString("\r\n")
-	}
-
-	return result.String()
-}
-
 func getInfoPanel() string {
 	return "\033[1;33m╭─\033[0m \033[1;37mZulfi Fadilah Azhar\033[0m\n" +
 		"\033[33m├─\033[0m \033[37mPresident of CodeLabs 2025-2026\033[0m\n" +
@@ -115,10 +44,155 @@ func getInfoPanel() string {
 		"\033[36mShanghai, China\033[0m"
 }
 
-func sshHandler(s ssh.Session) {
-	banner := getBanner()
-	s.Write([]byte(banner))
-	s.Close()
+func renderNameArt(pngPath string) []string {
+	cmd := exec.Command("chafa", "-s", "50x25", "--fg-only", pngPath)
+	var out strings.Builder
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	
+	lines := strings.Split(out.String(), "\n")
+	var result []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			result = append(result, line)
+		}
+	}
+	return result
+}
+
+func extractGifFrames(gifPath string, width int) [][]string {
+	// Use chafa to extract all frames from GIF
+	cmd := exec.Command("chafa", "-s", fmt.Sprintf("%dx25", width), "--fg-only", "--animate=off", gifPath)
+	var out strings.Builder
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	
+	output := out.String()
+	
+	// Split by frame delimiter - each frame starts after [?25h and ends with [?25l
+	// Actually, let's split by the clear screen + hide cursor sequence
+	frames := strings.Split(output, "\033[?25l")
+	
+	var result [][]string
+	for _, frame := range frames {
+		frame = strings.TrimSpace(frame)
+		if frame == "" {
+			continue
+		}
+		// Remove trailing [?25h if present
+		frame = strings.TrimSuffix(frame, "\033[?25h")
+		frame = strings.TrimSuffix(frame, "\033[?25l")
+		
+		lines := strings.Split(frame, "\n")
+		var frameLines []string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				frameLines = append(frameLines, line)
+			}
+		}
+		if len(frameLines) > 0 {
+			result = append(result, frameLines)
+		}
+	}
+	
+	return result
+}
+
+func streamAnimation(s ssh.Session, gifPath string, namePng string) {
+	// Pre-render static content
+	nameLines := renderNameArt(namePng)
+	if nameLines == nil {
+		return
+	}
+	infoLines := strings.Split(getInfoPanel(), "\n")
+	
+	// Pre-render all GIF frames
+	frames := extractGifFrames(gifPath, 55)
+	if len(frames) == 0 {
+		return
+	}
+	
+	frameIdx := 0
+	ticker := time.NewTicker(150 * time.Millisecond)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			frame := frames[frameIdx%len(frames)]
+			output := renderScreen(frame, nameLines, infoLines)
+			s.Write([]byte(output))
+			
+			frameIdx++
+			// Infinite loop - frames already contains all GIF frames, just cycle through them
+			
+		case <-s.Context().Done():
+			s.Write([]byte("\033[?25h"))
+			return
+		}
+	}
+}
+
+func renderScreen(gifLines []string, nameLines []string, infoLines []string) string {
+	var result strings.Builder
+	
+	// Clear screen, hide cursor, home
+	result.WriteString("\033[?25l\033[H\033[2J")
+	
+	maxLines := len(gifLines)
+	if len(nameLines) > maxLines {
+		maxLines = len(nameLines)
+	}
+	if len(infoLines) > maxLines {
+		maxLines = len(infoLines)
+	}
+	
+	for i := 0; i < maxLines; i++ {
+		// Left: GIF frame
+		left := ""
+		if i < len(gifLines) {
+			left = gifLines[i]
+		}
+		
+		// Right: name art or info
+		right := ""
+		if i < len(nameLines) {
+			right = nameLines[i]
+		} else {
+			infoIdx := i - len(nameLines)
+			if infoIdx >= 0 && infoIdx < len(infoLines) {
+				right = infoLines[infoIdx]
+			}
+		}
+		
+		if left != "" {
+			result.WriteString(left)
+		}
+		
+		if right != "" {
+			// Pad left
+			for len([]rune(left)) < 58 {
+				result.WriteString(" ")
+				left += " "
+			}
+			result.WriteString("  ")
+			result.WriteString(right)
+		}
+		
+		if i < maxLines-1 {
+			result.WriteString("\r\n")
+		}
+	}
+	
+	// Show cursor
+	result.WriteString("\033[?25h")
+	
+	return result.String()
 }
 
 func main() {
@@ -127,9 +201,11 @@ func main() {
 		wish.WithMiddleware(
 			func(next ssh.Handler) ssh.Handler {
 				return func(s ssh.Session) {
-					banner := getBanner()
-					s.Write([]byte(banner))
-					next(s)
+					exeDir := getExeDir()
+					gifPath := filepath.Join(exeDir, "assets", "ascii-animation.gif")
+					namePng := filepath.Join(exeDir, "assets", "ascii-art-text-zulfi.png")
+					
+					streamAnimation(s, gifPath, namePng)
 				}
 			},
 			logging.Middleware(),
