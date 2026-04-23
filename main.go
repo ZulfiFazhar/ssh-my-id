@@ -20,18 +20,6 @@ const (
 	host = "0.0.0.0"
 	port = 2222
 )
-
-// ASCII Art Name
-const asciiName = ` ________ __ ______ __ ________ __ __ __ __ ______ __ 
-/ | / | / \ / | / | / |/ |/ | / | / \ / | 
-$$$$$$$$/ __ __ $$ |/$$$$$$ |$$/ $$$$$$$$/______ ____$$ |$$/ $$ | ______ $$ |____ /$$$$$$ | ________ $$ |____ ______ ______ 
- /$$/ / | / |$$ |$$ |_ $$/ / | $$ |__ / \ / $$ |/ |$$ | / \ $$ \ $$ |__$$ |/ |$$ \ / \ / \ 
- /$$/ $$ | $$ |$$ |$$ | $$ | $$ | $$$$$$ |/$$$$$$$ |$$ |$$ | $$$$$$ |$$$$$$$ | $$ $$ |$$$$$$$$/ $$$$$$$ | $$$$$$ |/$$$$$$ |
- /$$/ $$ | $$ |$$ |$$$$/ $$ | $$$$$/ / $$ |$$ | $$ |$$ |$$ | / $$ |$$ | $$ | $$$$$$$$ | / $$/ $$ | $$ | / $$ |$$ | $$/ 
- /$$/ ____ $$ \__$$ |$$ |$$ | $$ | $$ | /$$$$$$$ |$$ \__$$ |$$ |$$ |/$$$$$$$ |$$ | $$ | $$ | $$ | /$$$$/__ $$ | $$ |/$$$$$$$ |$$ | 
-/$$ |$$ $$/ $$ |$$ | $$ | $$ | $$ $$ |$$ $$ |$$ |$$ |$$ $$ |$$ | $$ | $$ | $$ |/$$ |$$ | $$ |$$ $$ |$$ | 
-$$$$$$$$/ $$$$$$/ $$/ $$/ $$/ $$/ $$$$$$$/ $$$$$$$/ $$/ $$/ $$$$$$$/ $$/ $$/ $$/ $$/ $$$$$$$$/ $$/ $$/ $$$$$$$/ $$/ `
-
 func getExeDir() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -56,56 +44,40 @@ func renderGifToAscii(gifPath string, width int) string {
 
 func getBanner() string {
 	exeDir := getExeDir()
+	pngPath := filepath.Join(exeDir, "assets", "ascii-art-text-zulfi.png")
 	gifPath := filepath.Join(exeDir, "assets", "ascii-animation.gif")
 	
-	// Render GIF as ASCII art (left side)
-	asciiGif := renderGifToAscii(gifPath, 55)
+	// Render PNG name art (left)
+	asciiName := renderGifToAscii(pngPath, 80)
 	
-	// Info panel (right side)
-	info := `
-
-  \033[1;33m╭─\033[0m \033[1;37mZulfi Fadilah Azhar\033[0m
-  \033[33m├─\033[0m \033[37mPresident of CodeLabs 2025-2026\033[0m
-  \033[33m├─\033[0m \033[37mFull Stack Developer\033[0m
-  \033[33m├─\033[0m \033[37mFocus: RAG, LLM, NLP\033[0m
-  \033[33m├─\033[0m \033[37mPython | Go | TypeScript\033[0m
-  \033[33m╰─\033[0m \033[36mgithub.com/ZulfiFazhar\033[0m
-  
-  \033[36mShanghai, China\033[0m`
-
+	// Render GIF as ASCII art (right side, smaller)
+	asciiGif := renderGifToAscii(gifPath, 50)
+	
 	// Combine left-right layout
-	asciiLines := strings.Split(asciiGif, "\n")
-	infoLines := strings.Split(info, "\n")
+	nameLines := strings.Split(asciiName, "\n")
+	gifLines := strings.Split(asciiGif, "\n")
 	
 	var result strings.Builder
-	
-	// Header with ASCII name
-	result.WriteString("\r\n")
-	result.WriteString("\033[1;36m")
-	result.WriteString(asciiName)
-	result.WriteString("\033[0m")
 	result.WriteString("\r\n")
 	
-	maxLines := len(asciiLines)
-	if len(infoLines) > maxLines {
-		maxLines = len(infoLines)
+	maxLines := len(nameLines)
+	if len(gifLines) > maxLines {
+		maxLines = len(gifLines)
 	}
 	
 	for i := 0; i < maxLines; i++ {
 		left := ""
-		if i < len(asciiLines) {
-			left = asciiLines[i]
+		if i < len(nameLines) {
+			left = nameLines[i]
 		}
 		right := ""
-		if i < len(infoLines) {
-			right = infoLines[i]
+		if i < len(gifLines) {
+			right = gifLines[i]
 		}
-		if left != "" {
-			result.WriteString(left)
-		}
+		result.WriteString(left)
 		if right != "" {
-			// Pad to align with ASCII art
-			for len(left) < 60 {
+			// Pad to align
+			for len(left) < 90 {
 				result.WriteString(" ")
 				left += " "
 			}
