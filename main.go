@@ -20,6 +20,7 @@ const (
 	host = "0.0.0.0"
 	port = 2222
 )
+
 func getExeDir() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -32,8 +33,8 @@ func getExeDir() string {
 	return dir
 }
 
-func renderGifToAscii(gifPath string, width int) string {
-	cmd := exec.Command("chafa", "-s", fmt.Sprintf("%dx25", width), gifPath)
+func renderChafa(imagePath string, width int) string {
+	cmd := exec.Command("chafa", "-s", fmt.Sprintf("%dx25", width), imagePath)
 	var out strings.Builder
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -46,38 +47,51 @@ func getBanner() string {
 	exeDir := getExeDir()
 	pngPath := filepath.Join(exeDir, "assets", "ascii-art-text-zulfi.png")
 	gifPath := filepath.Join(exeDir, "assets", "ascii-animation.gif")
-	
-	// Render PNG name art (left)
-	asciiName := renderGifToAscii(pngPath, 80)
-	
-	// Render GIF as ASCII art (right side, smaller)
-	asciiGif := renderGifToAscii(gifPath, 50)
-	
-	// Combine left-right layout
-	nameLines := strings.Split(asciiName, "\n")
-	gifLines := strings.Split(asciiGif, "\n")
-	
+
+	// Render assets
+	gifAscii := renderChafa(gifPath, 55)   // Left: GIF animation
+	nameAscii := renderChafa(pngPath, 55)  // Right top: name art
+	infoAscii := getInfoPanel()
+
+	gifLines := strings.Split(gifAscii, "\n")
+	nameLines := strings.Split(nameAscii, "\n")
+	infoLines := strings.Split(infoAscii, "\n")
+
+	// Determine max height
+	maxLines := len(gifLines)
+	if len(nameLines)+len(infoLines) > maxLines {
+		maxLines = len(nameLines) + len(infoLines)
+	}
+
 	var result strings.Builder
 	result.WriteString("\r\n")
-	
-	maxLines := len(nameLines)
-	if len(gifLines) > maxLines {
-		maxLines = len(gifLines)
-	}
-	
+
 	for i := 0; i < maxLines; i++ {
 		left := ""
-		if i < len(nameLines) {
-			left = nameLines[i]
-		}
-		right := ""
 		if i < len(gifLines) {
-			right = gifLines[i]
+			left = gifLines[i]
 		}
-		result.WriteString(left)
+
+		// Right side: name (top) + info (bottom)
+		right := ""
+		nameIdx := i
+		infoIdx := i - len(nameLines)
+
+		if nameIdx >= 0 && nameIdx < len(nameLines) {
+			right = nameLines[nameIdx]
+		} else if infoIdx >= 0 && infoIdx < len(infoLines) {
+			right = infoLines[infoIdx]
+		}
+
+		// Pad left to align with right
+		if left != "" {
+			result.WriteString(left)
+		}
+
+		// Add spacing and right content
 		if right != "" {
-			// Pad to align
-			for len(left) < 90 {
+			// Pad left to ~60 chars before writing right
+			for len(left) < 58 {
 				result.WriteString(" ")
 				left += " "
 			}
@@ -86,8 +100,19 @@ func getBanner() string {
 		}
 		result.WriteString("\r\n")
 	}
-	
+
 	return result.String()
+}
+
+func getInfoPanel() string {
+	return "\033[1;33m╭─\033[0m \033[1;37mZulfi Fadilah Azhar\033[0m\n" +
+		"\033[33m├─\033[0m \033[37mPresident of CodeLabs 2025-2026\033[0m\n" +
+		"\033[33m├─\033[0m \033[37mFull Stack Developer\033[0m\n" +
+		"\033[33m├─\033[0m \033[37mFocus: RAG, LLM, NLP\033[0m\n" +
+		"\033[33m├─\033[0m \033[37mPython | Go | TypeScript\033[0m\n" +
+		"\033[33m╰─\033[0m \033[36mgithub.com/ZulfiFazhar\033[0m\n" +
+		"\n" +
+		"\033[36mShanghai, China\033[0m"
 }
 
 func sshHandler(s ssh.Session) {
