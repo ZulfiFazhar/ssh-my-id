@@ -11,10 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
 )
 
@@ -47,7 +45,7 @@ func getExeDir() string {
 }
 
 func renderGifToAscii(gifPath string, width int) string {
-	cmd := exec.Command("chafa", "-w", fmt.Sprintf("%d", width), "--fg-only", gifPath)
+	cmd := exec.Command("chafa", "-s", fmt.Sprintf("%dx25", width), gifPath)
 	var out strings.Builder
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -61,34 +59,33 @@ func getBanner() string {
 	gifPath := filepath.Join(exeDir, "assets", "ascii-animation.gif")
 	
 	// Render GIF as ASCII art (left side)
-	asciiGif := renderGifToAscii(gifPath, 65)
+	asciiGif := renderGifToAscii(gifPath, 55)
 	
 	// Info panel (right side)
-	info := fmt.Sprintf(`%s
+	info := `
 
-  %s %s Zulfi Fadilah Azhar
-  %s %s President of CodeLabs 2025-2026
-  %s %s Full Stack Developer
-  %s %s Focus: RAG, LLM, NLP
-  %s %s Python | Go | TypeScript
+  \033[1;33m╭─\033[0m \033[1;37mZulfi Fadilah Azhar\033[0m
+  \033[33m├─\033[0m \033[37mPresident of CodeLabs 2025-2026\033[0m
+  \033[33m├─\033[0m \033[37mFull Stack Developer\033[0m
+  \033[33m├─\033[0m \033[37mFocus: RAG, LLM, NLP\033[0m
+  \033[33m├─\033[0m \033[37mPython | Go | TypeScript\033[0m
+  \033[33m╰─\033[0m \033[36mgithub.com/ZulfiFazhar\033[0m
   
-  %s github.com/ZulfiFazhar
-  %s Shanghai, China`,
-		"\x1b[1;36m"+asciiName+"\x1b[0m",
-		"\x1b[33m", "\x1b[1;37m",
-		"\x1b[33m", "\x1b[1;37m",
-		"\x1b[33m", "\x1b[1;37m",
-		"\x1b[33m", "\x1b[1;37m",
-		"\x1b[33m", "\x1b[1;37m",
-		"\x1b[36m",
-		"\x1b[36m",
-	)
-	
+  \033[36mShanghai, China\033[0m`
+
 	// Combine left-right layout
 	asciiLines := strings.Split(asciiGif, "\n")
 	infoLines := strings.Split(info, "\n")
 	
 	var result strings.Builder
+	
+	// Header with ASCII name
+	result.WriteString("\r\n")
+	result.WriteString("\033[1;36m")
+	result.WriteString(asciiName)
+	result.WriteString("\033[0m")
+	result.WriteString("\r\n")
+	
 	maxLines := len(asciiLines)
 	if len(infoLines) > maxLines {
 		maxLines = len(infoLines)
@@ -103,36 +100,44 @@ func getBanner() string {
 		if i < len(infoLines) {
 			right = infoLines[i]
 		}
-		result.WriteString(left)
+		if left != "" {
+			result.WriteString(left)
+		}
 		if right != "" {
-			result.WriteString("   ")
+			// Pad to align with ASCII art
+			for len(left) < 60 {
+				result.WriteString(" ")
+				left += " "
+			}
+			result.WriteString("  ")
 			result.WriteString(right)
 		}
-		result.WriteString("\n")
+		result.WriteString("\r\n")
 	}
 	
 	return result.String()
 }
 
-func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
-	return model{content: getBanner()}, []tea.ProgramOption{tea.WithAltScreen()}
+func sshHandler(s ssh.Session) {
+	banner := getBanner()
+	s.Write([]byte(banner))
+	s.Close()
 }
-
-type model struct {
-	content string
-}
-
-func (m model) Init() tea.Cmd                           { return nil }
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
-func (m model) View() string                            { return m.content }
 
 func main() {
 	s, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf("%s:%d", host, port)),
 		wish.WithMiddleware(
-			bubbletea.Middleware(teaHandler),
+			func(next ssh.Handler) ssh.Handler {
+				return func(s ssh.Session) {
+					banner := getBanner()
+					s.Write([]byte(banner))
+					next(s)
+				}
+			},
 			logging.Middleware(),
 		),
+		wish.WithHostKeyPath("/home/ubuntu/app/ssh-my-id/id_ed25519"),
 	)
 	if err != nil {
 		fmt.Printf("Gagal membuat server: %v\n", err)
